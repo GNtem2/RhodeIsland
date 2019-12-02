@@ -174,7 +174,7 @@ webshot::webshot("Rhode_state_heatmap.html",file="Rhode_state_heatmap.png")
 stroke2$Hub[stroke2$designation=="CSC"]<-1
 stroke2$Hub[stroke2$designation=="PSC"]<-0
 
-#icon
+#awesome icon-different color
 X=cbind(stroke2$lon,stroke2$lat)
 st_bbox(stroke2)
 
@@ -196,7 +196,7 @@ getColor <- function(Spoke) {
 }
 
 
-
+#awesome icon
 icons <- awesomeIcons(
   #icon = 'ios-close',
   icon= 'medkit',
@@ -205,10 +205,12 @@ icons <- awesomeIcons(
   markerColor = getColor(vorsf$designation)
 )
 
+#color voronoi
 pal <- colorFactor(
     palette = c("red","yellow","blue"),
      domain = as.factor(stroke2$Hospital))
 
+#leaflet
 t<-leaflet (data=stroke2) %>%
 setView(-71.40888, 41.81035, 9) %>%
 addTiles() %>%
@@ -216,12 +218,20 @@ addTiles() %>%
 addAwesomeMarkers(lng=stroke2$lon,lat=stroke2$lat, icon=icons, 
                   label=~as.character(stroke2$Hospital))%>%
 
-addPolygons(data=vorsf, stroke=TRUE,               color="black", weight=1,fillOpacity = .2,              fillColor=~pal(as.factor(vorsf$Hospital)),fill=TRUE, popup =as.character(vorsf$Hospital),              highlightOptions = TRUE)   
-
+addPolygons(data=vorsf, stroke=TRUE,               color="black", weight=1,fillOpacity = .2,              fillColor=~pal(as.factor(vorsf$Hospital)),fill=TRUE, popup =as.character(vorsf$Hospital),              highlightOptions = TRUE) %>%
+  addCircles(-71.40888, 41.81035,radius = 16000,color = "orange") %>%
+  addCircles(-71.40888, 41.81035,radius = 32000,color = "red") %>%
+  
+addMeasure(primaryLengthUnit = "meters",
+                 primaryAreaUnit = "sqmeters",
+                 activeColor = "red",
+                 completedColor = "red") %>%
+      addMiniMap(toggleDisplay = TRUE)
 t
 
-htmlwidgets::saveWidget(q,file="Rhode_state_awesomeicon.html")
-webshot::webshot("Rhode_state_heatmap.html",file="Rhode_state_awesomeicon.png")
+htmlwidgets::saveWidget(t,file="Rhode_state_awesomeicon.html")
+webshot::webshot("Rhode_state_awesomeicon.html",file="Rhode_state_awesomeicon.png")
+
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
