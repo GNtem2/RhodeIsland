@@ -1,0 +1,237 @@
+---
+title: "index"
+author: "gntem2"
+date: "25/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r data}
+library(readxl)
+library(dplyr)
+library(leaflet)
+library(sf)
+library(tmap)
+library(tmaptools)
+library(leaflet.extras)
+
+
+stroke<-read_xlsx("Rhode.xlsx")
+#geocode hospitals 
+#turn off after geocoding
+#source("Search.R") #ggmap key
+#addresses = stroke$Hospital
+#city = stroke$Region
+#addresses = paste0(addresses, city)
+#hospUS<-geocode(addresses) #only geocode once
+
+#mapdist to Rhode Island Hosp
+#to="Rhode Island Hospital, Rhode Island"
+#Dist=mapdist(addresses,to)
+
+#bind data
+#stroke1<-cbind.data.frame(stroke,hospUS)
+#stroke2<-cbind.data.frame(stroke1,Dist)
+#save(stroke2,file="stroke2_Rhode.Rda")
+
+#load("stroke2_Rhode.Rda")
+stroke2=stroke
+
+
+#library(rgdal)
+#library(rgeos)
+
+#https://stackoverflow.com/questions/33176378/mapping-zip-code-vs-county-shapefile-in-r
+#code for rgdal
+#downloaddir<-"tl_2019_us_county"
+#dat<-readOGR(downloaddir, "tl_2019_us_county") 
+# ----- Create a subset of Providence counties
+#subdat<-dat[substring(dat$STATEFP,1,2) == "44",]
+# ----- Transform to EPSG 4326 - WGS84 (required)
+#subdat<-spTransform(subdat, CRS("+init=epsg:4326"))
+
+#####
+#use sf
+gccsa<-st_read("./tl_2019_us_county/tl_2019_us_county.shp")
+gccsa_f<-filter(gccsa,STATEFP=="44")#Rhode
+gccsa_fb<-st_union(gccsa_f) #keep border
+
+gccsa_fma<-filter(gccsa,STATEFP=="25") #MA
+gccsa_fbma<-st_union(gccsa_fma) #keep border
+
+##
+library(dismo)
+library(maptools)
+library(lwgeom)
+library(KernSmooth)
+
+
+#convert stroke2 to spatialpointdataframe
+coordinates(stroke2) <- c("lon", "lat")
+
+proj4string(stroke2) <- CRS("+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs")
+
+#create voronoi from msclinic data
+#object is in sp
+msv<-voronoi(stroke2)
+
+#transform sf to sp object
+gccsa_fsp<-as(gccsa_fb,Class="Spatial")
+
+
+```
+
+
+
+```{r leaflet}
+
+pal <- colorFactor(
+    palette = c("red","blue"),
+    domain = as.factor(stroke2$designation))
+
+#map conversion miles to km = 1.609649
+l<-leaflet (data=stroke2) %>%
+setView(-71.40888, 41.81035, 9) %>%
+addTiles() %>%
+addCircleMarkers(lng=stroke2$lon,      lat=stroke2$lat,      radius=4,      color=~pal(as.factor(stroke2$designation)),      popup = paste0("Hospital=",stroke2$Hospital,",  Certification=",stroke2$designation,", Miles=",stroke2$Miles,", travel minutes=",stroke2$minutes))%>%
+
+addHeatmap(data = stroke2, intensity = stroke2$Miles, blur = 50)
+#addCircles(-71.40888, 41.81035,radius=16096.49, fillColor = "blue",fillOpacity = 0.1) #%>%
+  #addCircles(-71.40888, 41.81035,radius=32192.98,fillColor = "red",fillOpacity = 0.1) 
+
+l
+
+htmlwidgets::saveWidget(l,file="Rhode.html")
+webshot::webshot("Rhode.html",file="Rhode.png")
+```
+
+```{r, voronoi}
+
+
+  
+#voronoi bound by Rhode
+vor <- dismo::voronoi(stroke2, ext=extent(gccsa_fsp))
+r <- intersect(vor, gccsa_fsp)
+
+#r<-intersect(msv,gccsa_fsp)
+
+stroke2$Hospital<-as.character(stroke2$Hospital)
+plot(r, col=rainbow(length(r)), lwd=3)
+
+#sp to sf
+#error with epsg conversion back
+vorsf<-st_as_sf(r,crs=4283)
+
+
+
+
+#lealfet
+pal <- colorFactor(
+    palette = c("red","blue"),
+    domain = as.factor(vorsf$designation))
+
+pal2 <- colorFactor(
+    palette = c("red","yellow","blue"),
+     domain = as.factor(vorsf$Hospital))
+
+p<-leaflet (data=stroke2) %>%
+setView(-71.40888, 41.81035, 9) %>%
+addTiles() %>%
+  
+addPolygons(data=vorsf, stroke=TRUE,               color="black", weight=1,fillOpacity = .2,              fillColor=~pal2(as.factor(vorsf$Hospital)),fill=TRUE, popup =as.character(vorsf$Hospital),              highlightOptions = TRUE) %>%
+
+addCircleMarkers(lng=stroke2$lon,
+      lat=stroke2$lat,
+      radius=4,
+      color=~pal(as.factor(stroke2$designation)),
+      popup = paste0("Hospital=",stroke2$Hospital,",  Certification=",stroke2$designation,", Miles=",stroke2$Miles,", travel minutes=",stroke2$minutes)) 
+  
+
+ 
+p
+
+q<-p %>% addHeatmap(data = stroke2, intensity = stroke2$Miles, blur = 50)
+
+q
+htmlwidgets::saveWidget(p,file="Rhode_state.html")
+webshot::webshot("Rhode_state.html",file="Rhode_state.png")
+
+htmlwidgets::saveWidget(q,file="Rhode_state_heatmap.html")
+webshot::webshot("Rhode_state_heatmap.html",file="Rhode_state_heatmap.png")
+
+```
+```{r}
+#join data by dplyr
+stroke2$Hub[stroke2$designation=="CSC"]<-1
+stroke2$Hub[stroke2$designation=="PSC"]<-0
+
+#awesome icon-different color
+X=cbind(stroke2$lon,stroke2$lat)
+st_bbox(stroke2)
+
+kde2d <- bkde2D(X, bandwidth=c(bw.ucv(X[,1]),bw.ucv(X[,2])))
+x=kde2d$x1
+y=kde2d$x2
+z=kde2d$fhat
+CL=contourLines(x , y , z)
+
+
+#icon markers
+getColor <- function(Spoke) {
+ sapply(stroke2$Hub, function(Hub) {
+  if(Hub == 1 ) {
+   "red"
+  } else {
+   "blue"
+  } })
+}
+
+
+#awesome icon
+icons <- awesomeIcons(
+  #icon = 'ios-close',
+  icon= 'medkit',
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(vorsf$designation)
+)
+
+#color voronoi
+pal <- colorFactor(
+    palette = c("red","yellow","blue"),
+     domain = as.factor(stroke2$Hospital))
+
+#leaflet
+t<-leaflet (data=stroke2) %>%
+setView(-71.40888, 41.81035, 9) %>%
+addTiles() %>%
+
+addAwesomeMarkers(lng=stroke2$lon,lat=stroke2$lat, icon=icons, 
+                  label=~as.character(stroke2$Hospital))%>%
+
+addPolygons(data=vorsf, stroke=TRUE,               color="black", weight=1,fillOpacity = .2,              fillColor=~pal(as.factor(vorsf$Hospital)),fill=TRUE, popup =as.character(vorsf$Hospital),              highlightOptions = TRUE) %>%
+  addCircles(-71.40888, 41.81035,radius = 16000,color = "orange") %>%
+  addCircles(-71.40888, 41.81035,radius = 32000,color = "red") %>%
+  
+addMeasure(primaryLengthUnit = "meters",
+                 primaryAreaUnit = "sqmeters",
+                 activeColor = "red",
+                 completedColor = "red") %>%
+      addMiniMap(toggleDisplay = TRUE)
+t
+
+htmlwidgets::saveWidget(t,file="Rhode_state_awesomeicon.html")
+webshot::webshot("Rhode_state_awesomeicon.html",file="Rhode_state_awesomeicon.png")
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
